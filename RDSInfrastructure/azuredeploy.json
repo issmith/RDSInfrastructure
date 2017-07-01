@@ -1,0 +1,653 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+
+    "AdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "AdminPassword": {
+      "type": "securestring"
+    },
+    "WindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2016-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "2016-Datacenter"
+      ]
+    }
+
+
+  },
+  "variables": {
+    "vnetPrefix": "10.1.0.0/16",
+    "vnetSubnet1Name": "DC-Subnet-1",
+    "vnetSubnet1Prefix": "10.1.0.0/24",
+    "vnetSubnet2Name": "EMIR-Subnet-2",
+    "vnetSubnet2Prefix": "10.1.1.0/24",
+    "vnetSubnet3Name": "RDS-Subnet-3",
+    "vnetSubnet3Prefix": "10.1.2.0/24",
+    "vnetSubnet4Name": "RDSGWAY-Subnet-4",
+    "vnetSubnet4Prefix": "10.1.3.0/24",
+    "ImageOffer": "WindowsServer",
+    "ImagePublisher": "MicrosoftWindowsServer",
+
+
+
+    "RDSVmSize": "Standard_DS1_v2",
+    "AppVmSize": "Standard_DS1_v2",
+    "RDSBrokerVmSize": "Standard_DS1_v2",
+    "RDSGatewayVmSize": "Standard_DS1_v2",
+
+
+    "vnetID": "[resourceId('DomainControllerAndVNET', 'Microsoft.Network/virtualNetworks', 'vnet')]",
+    "RDSsubnetRef": "[concat(variables('vnetID'),'/subnets/', variables('vnetSubnet3Name'))]",
+    "EMIRSubnetRef": "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnet2Name'))]",
+    "RDSGatewaySubnetRef": "[concat(variables('VnetID'), '/subnets/', variables('vnetSubnet4Name'))]"
+  },
+
+  "resources": [
+    {
+      "name": "rdsbrokeras",
+      "type": "Microsoft.Compute/availabilitySets",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [],
+      "sku": {
+        "name": "Aligned"
+      },
+      "tags": {
+        "displayName": "rdsbrokerAS"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 5,
+        "platformFaultDomainCount": 2
+
+      }
+    },
+
+    {
+      "name": "emirsessionhostAS",
+      "type": "Microsoft.Compute/availabilitySets",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [],
+      "sku": {
+        "name": "Aligned"
+      },
+      "tags": {
+        "displayName": "emirsessionhostAS"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 5,
+        "platformFaultDomainCount": 2
+
+      }
+    },
+
+    {
+      "name": "rdsgatewayrdswebAS",
+      "type": "Microsoft.Compute/availabilitySets",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [],
+      "sku": {
+        "name": "Aligned"
+      },
+      "tags": {
+        "displayName": "rdsgatewayrdswebAS"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 5,
+        "platformFaultDomainCount": 2
+
+      }
+    },
+    {
+      "name": "RDS01Nic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDS01Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('RDSSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RDS01",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'RDS01Nic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+      ],
+      "tags": {
+        "displayName": "RDS01"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDS01",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDS01OSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDS01Nic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+
+    {
+      "name": "RDS02Nic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDS02Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('RDSSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+
+
+
+    {
+      "name": "RDS02",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'rds02nic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+      ],
+      "tags": {
+        "displayName": "RDS02"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDS02",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDS02OSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDS02Nic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+    {
+      "name": "RDS03Nic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDS03Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('RDSSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RDS03",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'rds03nic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+      ],
+      "tags": {
+        "displayName": "RDS03"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'emirsessionhostAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDS03",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDS03OSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDS03Nic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+
+
+    {
+      "name": "AppNic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "AppNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('EMIRSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "App",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'Appnic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'rdsbrokerAS')]"
+      ],
+      "tags": {
+        "displayName": "App"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('AppVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'rdsbrokerAS')]"
+        },
+        "osProfile": {
+          "computerName": "App",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "AppOSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'AppNic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+
+    {
+      "name": "RDSBrokerNic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDSBrokerNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('EMIRSubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RDSBroker",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'RDSBrokerNic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'rdsbrokerAS')]"
+      ],
+      "tags": {
+        "displayName": "RDSBroker"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSBrokerVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'rdsbrokerAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDSBroker",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDSBrokerOSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDSBrokerNic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+
+    {
+      "name": "RDSGateway01Nic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDSGateway01Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('RDSGatewaySubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RDSGateway01",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'Appnic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'rdsbrokerAS')]"
+      ],
+      "tags": {
+        "displayName": "RDSGateway01"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSGatewayVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'rdsgatewayrdswebAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDSGateway01",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDSGateway01OSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDSGateway01Nic')]"
+            }
+          ]
+        }
+      }
+
+
+    },
+
+
+    {
+      "name": "RDSGateway02Nic",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+
+      ],
+      "tags": {
+        "displayName": "RDSGateway02Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('RDSGatewaySubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RDSGateway02",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', 'RDSGateway02nic')]",
+        "[resourceId('Microsoft.Compute/availabilitySets', 'rdsgatewayrdswebAS')]"
+      ],
+      "tags": {
+        "displayName": "RDSGateway02"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('RDSGatewayVmSize')]"
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets', 'rdsgatewayrdswebAS')]"
+        },
+        "osProfile": {
+          "computerName": "RDSGateway02",
+          "adminUsername": "[parameters('AdminUsername')]",
+          "adminPassword": "[parameters('AdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('ImagePublisher')]",
+            "offer": "[variables('ImageOffer')]",
+            "sku": "[parameters('WindowsOSVersion')]",
+            "version": "latest"
+
+          },
+          "osDisk": {
+            "name": "RDSGateway02OSDisk",
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', 'RDSGateway02Nic')]"
+            }
+          ]
+        }
+      }
+
+
+    }
+
+  ],
+  "outputs": {}
+}
